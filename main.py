@@ -296,7 +296,8 @@ def import_to_notion(games):
         try:
             display_progress_bar(idx - 1, len(games), prefix='进度:', suffix=f'处理中 {idx}/{len(games)}')
             details = get_game_details_with_cover(appid)
-
+            if not details.get("cover_url"):
+                continue
             properties = {
                 "游戏名": {"title": [{"text": {"content": details.get("name", f"未知游戏 {appid}")[:200]}}]},
                 "游玩时长": {"number": max(0, round(game.get("playtime_forever", 0) / 60, 1))},
@@ -314,7 +315,8 @@ def import_to_notion(games):
                 "媒体评分": {"number": details["metacritic"]}
                 if "metacritic" in details else None,
 
-                "appid": {"rich_text": [{"text": {"content": f"${appid}"}}]}
+                "appid": {"rich_text": [{"text": {"content": f"${appid}"}}]},
+                "数据更新时间": {"date": {"start": timestamp_to_iso(int(time.time()))}},
             }
 
             # 导入尝试
