@@ -182,15 +182,15 @@ def select_games_to_import(all_games):
 
     print(f"{len(hour_ranges) + 1}. 手动选择要导入的游戏")
 
-    while True:
-        try:
-            choice = int(input("\n请输入您的选择: "))
-            if 0 <= choice <= len(hour_ranges) + 1:
-                break
-            print("⚠️ 请输入有效的选项编号")
-        except ValueError:
-            print("⚠️ 请输入数字")
-
+    # while True:
+    #     try:
+    #         choice = int(input("\n请输入您的选择: "))
+    #         if 0 <= choice <= len(hour_ranges) + 1:
+    #             break
+    #         print("⚠️ 请输入有效的选项编号")
+    #     except ValueError:
+    #         print("⚠️ 请输入数字")
+    choice = 0
     if choice == 0:
         return all_games
     elif 1 <= choice <= len(hour_ranges):
@@ -425,7 +425,8 @@ if __name__ == "__main__":
             game_name = game.get("name", f"未知游戏 ({game['appid']})")
             print(f"{idx:3}. {game_name[:50]:50} ({hours}小时)")
 
-        confirm = input("\n确认导入 (Y/N)? ").strip().lower()
+        # confirm = input("\n确认导入 (Y/N)? ").strip().lower()
+        confirm = 'y'
         if confirm != 'y':
             print("取消导入")
             exit()
