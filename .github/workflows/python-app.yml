@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   build:
-    environment: aluu
+    environment: alu
     runs-on: ubuntu-latest
 
     steps:
