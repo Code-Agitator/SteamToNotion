@@ -12,20 +12,20 @@ from collections import defaultdict
 load_dotenv()
 notion = Client(auth=os.getenv("NOTION_TOKEN"))
 
-STEAM_RETRY_TIMES = 5        # 从3增加到5
-STEAM_TIMEOUT = 30           # 从25增加到30
-REQUEST_DELAY = 2            # 从1增加到2
+STEAM_RETRY_TIMES = 5  # 从3增加到5
+STEAM_TIMEOUT = 30  # 从25增加到30
+REQUEST_DELAY = 2  # 从1增加到2
 MAX_TAGS = 5
 MAX_DEVELOPERS = 3
 
-NOTION_RETRY_TIMES = 5       # 从3增加到5
-NOTION_DELAY = 3             # 从1.5增加到3
+NOTION_RETRY_TIMES = 5  # 从3增加到5
+NOTION_DELAY = 3  # 从1.5增加到3
+
 
 # === 工具函数 ===
 def clean_zh_text(text):
     """中文文本清洗"""
     return re.sub(r"""[^\u4e00-\u9fa5a-zA-Z0-9\-—，。？！、："'()（）·]""", '', str(text)) if text else ""
-
 
 
 def timestamp_to_iso(timestamp):
@@ -102,17 +102,16 @@ def get_game_details_with_cover(appid):
     EXCLUDE_TAGS = {
         "集换式卡牌", "成就", "云存储", "排行榜", "关卡编辑器",
         "创意工坊", "共享/分屏", "控制器", "远程畅玩", "内购",
-        "游戏内广告","免费开玩","可以仅用触控","自定义音量控制","Steam成就","同屏分屏",
-        "应用内购买","线上玩家对战","在手机上远程畅玩","在平板上远程畅玩","可调整文字大小",
-        "在电视上远程畅玩","Steam集换式卡牌","Steam云","家庭共享","Steam排行榜","统计数据",
-        "完全支持控制器","Steam创意工坊","包含关卡编辑器","无需应对快速反应事件","跨平台多人",
-        "在线合作","可选颜色","环绕声","立体声","可用HDR","抢先体验","远程同乐","定位控制器支持",
-        "Steam时间轴","已启用Valve反作弊保护","视角舒适度","聊天语音转文字"
+        "游戏内广告", "免费开玩", "可以仅用触控", "自定义音量控制", "Steam成就", "同屏分屏",
+        "应用内购买", "线上玩家对战", "在手机上远程畅玩", "在平板上远程畅玩", "可调整文字大小",
+        "在电视上远程畅玩", "Steam集换式卡牌", "Steam云", "家庭共享", "Steam排行榜", "统计数据",
+        "完全支持控制器", "Steam创意工坊", "包含关卡编辑器", "无需应对快速反应事件", "跨平台多人",
+        "在线合作", "可选颜色", "环绕声", "立体声", "可用HDR", "抢先体验", "远程同乐", "定位控制器支持",
+        "Steam时间轴", "已启用Valve反作弊保护", "视角舒适度", "聊天语音转文字"
     }
 
     url = f"https://store.steampowered.com/api/appdetails?appids={appid}&l=schinese"
     store_url = f"https://store.steampowered.com/app/{appid}/"
-
 
     for attempt in range(1, STEAM_RETRY_TIMES + 1):
         try:
@@ -241,6 +240,30 @@ def select_games_to_import(all_games):
             print("⚠️ 输入无效，请重新输入")
 
 
+def create_store_url_map_for_pages(pages_array):
+    """
+    为页面数组创建appid映射
+
+    Args:
+        pages_array: Notion页面数据数组
+
+    Returns:
+        dict: {appid: 页面ID}
+    """
+    appid_map = {}
+
+    for page in pages_array:
+        page_id = page.get("id")
+        # 从appid字段提取真实的appid（去除$前缀）
+        appid_content = page.get("properties", {}).get("appid", {}).get("rich_text", [])
+        if appid_content:
+            appid_text = appid_content[0].get("plain_text", "")
+            if appid_text:
+                appid_map[appid_text] = page_id
+
+    return appid_map
+
+
 # === Notion 集成 ===
 def import_to_notion(games):
     """导入数据到Notion（含详细状态跟踪）"""
@@ -252,6 +275,10 @@ def import_to_notion(games):
     fail_count = 0
     skipped_count = 0
     start_time = time.time()
+
+    # 获取原数据
+    origin_data = notion.search(filter={"value": "page", "property": "object"})["results"]
+    appid_map_page_id = create_store_url_map_for_pages(origin_data)
 
     # 创建状态表格展示
     print("\n导入状态实时更新：")
@@ -281,15 +308,20 @@ def import_to_notion(games):
                 "标签": {"multi_select": [{"name": tag} for tag in details.get("zh_tags", [])]}
                 if details.get("zh_tags") else None,
                 "开发商": {"rich_text": [{"text": {"content": ", ".join(details["developers"])[:200]}}]}
+
                 if details.get("developers") else None,
                 "发行日期": {"date": {"start": parse_any_date(details.get("release_date"))}},
                 "媒体评分": {"number": details["metacritic"]}
-                if "metacritic" in details else None
+                if "metacritic" in details else None,
+
+                "appid": {"rich_text": [{"text": {"content": f"${appid}"}}]}
             }
 
             # 导入尝试
             for attempt in range(1, NOTION_RETRY_TIMES + 1):
                 try:
+                    if appid in appid_map_page_id:
+                        notion.pages.update(page_id=appid_map_page_id[appid], in_trash=True)
                     notion.pages.create(
                         parent={"database_id": os.getenv("NOTION_DATABASE_ID")},
                         properties={k: v for k, v in properties.items() if v is not None}
@@ -363,6 +395,7 @@ def ensure_notion_database_columns():
             print("✅ 已添加'商店链接'列到Notion数据库")
     except Exception as e:
         print(f"⚠️ 数据库结构检查失败: {str(e)}")
+
 
 # === 主程序 ===
 if __name__ == "__main__":
