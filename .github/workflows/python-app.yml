@@ -4,6 +4,12 @@
 name: Python application
 
 on:
+  workflow_dispatch: # 添加这一行以支持手动触发
+    inputs:
+      reason:
+        description: '触发原因'
+        required: false
+        default: 'manual trigger'
   schedule:
     - cron: '0 2 * * *'  # 每天晚上运行
 
