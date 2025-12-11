@@ -314,7 +314,7 @@ def import_to_notion(games):
                 "媒体评分": {"number": details["metacritic"]}
                 if "metacritic" in details else None,
 
-                "appid": {"rich_text": [{"text": {"content": f"${appid}"}}]}
+                "appid": {"rich_text": [{"text": {"content": f"{appid}"}}]}
             }
 
             # 导入尝试
