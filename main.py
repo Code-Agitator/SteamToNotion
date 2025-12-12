@@ -265,6 +265,53 @@ def create_store_url_map_for_pages(pages_array):
 
 
 # === Notion 集成 ===
+def get_game_achievements(appid):
+    url = f"http://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v1?appid={appid}&key={os.getenv('STEAM_API_KEY')}&steamid={os.getenv('STEAM_ID')}&l=schinese"
+    for attempt in range(1, STEAM_RETRY_TIMES + 1):
+        try:
+            response = requests.get(url, timeout=STEAM_TIMEOUT)
+            data = response.json().get("playerstats", {})
+            achievements = data.get("achievements", [])
+
+            return achievements
+
+        except Exception as e:
+            print(f"⚠️ 游戏 {appid} 成就获取失败 (尝试 {attempt}/{STEAM_RETRY_TIMES}): {str(e)}")
+            time.sleep(REQUEST_DELAY * attempt)
+    return {}
+    pass
+
+
+def calculate_achievement_rate(achievements):
+    """
+    计算游戏成就完成率
+
+    Args:
+        achievements: 从Steam API获取的成就数据列表
+
+    Returns:
+        dict: 包含完成率统计信息的字典
+    """
+    if not achievements:
+        return {
+            "total": 0,
+            "unlocked": 0,
+            "rate": 0.0,
+            "percentage": "0%"
+        }
+
+    total_achievements = len(achievements)
+    unlocked_achievements = sum(1 for ach in achievements if ach.get("achieved", 0) == 1)
+    completion_rate = unlocked_achievements / total_achievements if total_achievements > 0 else 0
+
+    return {
+        "total": total_achievements,
+        "unlocked": unlocked_achievements,
+        "rate": completion_rate,
+        "percentage": f"{completion_rate * 100:.1f}%"
+    }
+
+
 def import_to_notion(games):
     """导入数据到Notion（含详细状态跟踪）"""
     ensure_notion_database_columns()
@@ -296,37 +343,46 @@ def import_to_notion(games):
         try:
             display_progress_bar(idx - 1, len(games), prefix='进度:', suffix=f'处理中 {idx}/{len(games)}')
             details = get_game_details_with_cover(appid)
+            achievements = get_game_achievements(appid)
+            achievement_rate = calculate_achievement_rate(achievements)
             if not details.get("cover_url"):
                 continue
             properties = {
                 "游戏名": {"title": [{"text": {"content": details.get("name", f"未知游戏 {appid}")[:200]}}]},
+
                 "游玩时长": {"number": max(0, round(game.get("playtime_forever", 0) / 60, 1))},
+
+                '成就进度': {'number': achievement_rate['rate']},
+
                 "最后游玩": {"date": {"start": timestamp_to_iso(game.get("rtime_last_played"))}}
                 if game.get("rtime_last_played") else None,
-                "封面链接": {"url": details.get("cover_url", "")}
-                if details.get("cover_url") else None,
-                "商店链接": {"url": details.get("store_url", "")},
+
                 "标签": {"multi_select": [{"name": tag} for tag in details.get("zh_tags", [])]}
                 if details.get("zh_tags") else None,
+
                 "开发商": {"rich_text": [{"text": {"content": ", ".join(details["developers"])[:200]}}]}
-
                 if details.get("developers") else None,
-                "发行日期": {"date": {"start": parse_any_date(details.get("release_date"))}},
-                "媒体评分": {"number": details["metacritic"]}
-                if "metacritic" in details else None,
 
-                "appid": {"rich_text": [{"text": {"content": f"{appid}"}}]}
+                "appid": {"rich_text": [{"text": {"content": f"{appid}"}}]},
                 "数据更新时间": {"date": {"start": timestamp_to_iso(int(time.time()))}},
+            }
+            icon_or_cover = {
+                'type': 'external',
+                'external': {
+                    'url': details.get("cover_url", "")
+                }
             }
 
             # 导入尝试
             for attempt in range(1, NOTION_RETRY_TIMES + 1):
                 try:
-                    if appid in appid_map_page_id:
-                        notion.pages.update(page_id=appid_map_page_id[appid], in_trash=True)
+                    if str(appid) in appid_map_page_id.keys():
+                        notion.pages.update(page_id=appid_map_page_id[str(appid)], in_trash=True)
                     notion.pages.create(
                         parent={"database_id": os.getenv("NOTION_DATABASE_ID")},
-                        properties={k: v for k, v in properties.items() if v is not None}
+                        properties={k: v for k, v in properties.items() if v is not None},
+                        icon=icon_or_cover,
+                        cover=icon_or_cover
                     )
                     status = "✅ 成功"
                     success_count += 1
@@ -338,7 +394,7 @@ def import_to_notion(games):
                     else:
                         time.sleep(NOTION_DELAY * attempt)
                 except Exception as e:
-                    status = f"❌ 失败({str(e)[:10]}...)"
+                    status = f"❌ 失败({str(e)})"
                     fail_count += 1
                     break
 
