@@ -375,7 +375,8 @@ def import_to_notion(games):
 
                 '成就进度(%)': {'number': achievement_rate['rate']},
 
-                "成就进度(数目)": {"rich_text": [{"text": {"content": f"{achievement_rate['unlocked']}/{achievement_rate["total"]}"}}]},
+                "成就进度(数目)": {"rich_text": [
+                    {"text": {"content": f"{achievement_rate['unlocked']}/{achievement_rate["total"]}"}}]},
 
                 "最后游玩": {"date": {"start": timestamp_to_iso(game.get("rtime_last_played"))}}
                 if game.get("rtime_last_played") else None,
@@ -401,13 +402,17 @@ def import_to_notion(games):
             for attempt in range(1, NOTION_RETRY_TIMES + 1):
                 try:
                     if str(appid) in appid_map_page_id.keys():
-                        notion.pages.update(page_id=appid_map_page_id[str(appid)], in_trash=True)
-                    notion.pages.create(
-                        parent={"type": "data_source_id", "data_source_id": main_datasource_id},
-                        properties={k: v for k, v in properties.items() if v is not None},
-                        icon=icon_or_cover,
-                        cover=icon_or_cover
-                    )
+                        notion.pages.update(page_id=appid_map_page_id[str(appid)],
+                                            properties={k: v for k, v in properties.items() if v is not None},
+                                            icon=icon_or_cover,
+                                            cover=icon_or_cover)
+                    else:
+                        notion.pages.create(
+                            parent={"type": "data_source_id", "data_source_id": main_datasource_id},
+                            properties={k: v for k, v in properties.items() if v is not None},
+                            icon=icon_or_cover,
+                            cover=icon_or_cover
+                        )
                     status = "✅ 成功"
                     success_count += 1
                     break
