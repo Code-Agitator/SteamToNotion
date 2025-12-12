@@ -110,7 +110,8 @@ def get_game_details_with_cover(appid):
         "在电视上远程畅玩", "Steam集换式卡牌", "Steam云", "家庭共享", "Steam排行榜", "统计数据",
         "完全支持控制器", "Steam创意工坊", "包含关卡编辑器", "无需应对快速反应事件", "跨平台多人",
         "在线合作", "可选颜色", "环绕声", "立体声", "可用HDR", "抢先体验", "远程同乐", "定位控制器支持",
-        "Steam时间轴", "已启用Valve反作弊保护", "视角舒适度", "聊天语音转文字"
+        "Steam时间轴", "已启用Valve反作弊保护", "视角舒适度", "聊天语音转文字", "可以仅用键盘", "部分支持控制器",
+        "大型多人在线"
     }
 
     url = f"https://store.steampowered.com/api/appdetails?appids={appid}&l=schinese"
