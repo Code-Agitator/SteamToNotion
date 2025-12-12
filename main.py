@@ -10,7 +10,10 @@ from collections import defaultdict
 
 # === 配置参数 ===
 load_dotenv()
-notion = Client(auth=os.getenv("NOTION_TOKEN"))
+token = os.getenv("NOTION_TOKEN")
+main_datasource_id = os.getenv("NOTION_MAIN_DATASOURCE_ID")
+rate_datasource_id = os.getenv("NOTION_RATE_DATASOURCE_ID")
+notion = Client(auth=token)
 
 STEAM_RETRY_TIMES = 5  # 从3增加到5
 STEAM_TIMEOUT = 30  # 从25增加到30
@@ -240,7 +243,7 @@ def select_games_to_import(all_games):
             print("⚠️ 输入无效，请重新输入")
 
 
-def create_store_url_map_for_pages(pages_array):
+def create_appid_map_for_pages(pages_array):
     """
     为页面数组创建appid映射
 
@@ -314,7 +317,6 @@ def calculate_achievement_rate(achievements):
 
 def import_to_notion(games):
     """导入数据到Notion（含详细状态跟踪）"""
-    ensure_notion_database_columns()
     print(f"\n准备导入 {len(games)} 个游戏...")
 
     # 初始化统计变量
@@ -324,8 +326,12 @@ def import_to_notion(games):
     start_time = time.time()
 
     # 获取原数据
-    origin_data = notion.search(filter={"value": "page", "property": "object"})["results"]
-    appid_map_page_id = create_store_url_map_for_pages(origin_data)
+    origin_data = notion.data_sources.query(data_source_id=main_datasource_id)["results"]
+    appid_map_page_id = create_appid_map_for_pages(origin_data)
+
+    # 获取评分原数据
+    origin_rate_data = notion.data_sources.query(data_source_id=rate_datasource_id)["results"]
+    appid_map_rate_page_id = create_appid_map_for_pages(origin_rate_data)
 
     # 创建状态表格展示
     print("\n导入状态实时更新：")
@@ -341,10 +347,25 @@ def import_to_notion(games):
         progress = f"{idx}/{len(games)}"
 
         try:
-            display_progress_bar(idx - 1, len(games), prefix='进度:', suffix=f'处理中 {idx}/{len(games)}')
             details = get_game_details_with_cover(appid)
             achievements = get_game_achievements(appid)
             achievement_rate = calculate_achievement_rate(achievements)
+
+            if str(appid) not in appid_map_rate_page_id:
+                rate_properties = {
+                    "appid": {"rich_text": [{"text": {"content": f"{appid}"}}]},
+                    "游戏名": {"title": [{"text": {"content": details.get("name", f"未知游戏 {appid}")[:200]}}]}
+                }
+                new_rate_page = notion.pages.create(
+                    parent={"type": "data_source_id", "data_source_id": rate_datasource_id},
+                    properties={k: v for k, v in rate_properties.items() if v is not None},
+                )
+                rate_page_id = new_rate_page.get("id", "")
+            else:
+                rate_page_id = appid_map_rate_page_id[str(appid)]
+
+            display_progress_bar(idx - 1, len(games), prefix='进度:', suffix=f'处理中 {idx}/{len(games)}')
+
             if not details.get("cover_url"):
                 continue
             properties = {
@@ -352,7 +373,9 @@ def import_to_notion(games):
 
                 "游玩时长": {"number": max(0, round(game.get("playtime_forever", 0) / 60, 1))},
 
-                '成就进度': {'number': achievement_rate['rate']},
+                '成就进度(%)': {'number': achievement_rate['rate']},
+
+                "成就进度(数目)": {"rich_text": [{"text": {"content": f"{achievement_rate['unlocked']}/{achievement_rate["total"]}"}}]},
 
                 "最后游玩": {"date": {"start": timestamp_to_iso(game.get("rtime_last_played"))}}
                 if game.get("rtime_last_played") else None,
@@ -365,6 +388,7 @@ def import_to_notion(games):
 
                 "appid": {"rich_text": [{"text": {"content": f"{appid}"}}]},
                 "数据更新时间": {"date": {"start": timestamp_to_iso(int(time.time()))}},
+                "打分关联": {"relation": [{"id": rate_page_id}]}
             }
             icon_or_cover = {
                 'type': 'external',
@@ -379,7 +403,7 @@ def import_to_notion(games):
                     if str(appid) in appid_map_page_id.keys():
                         notion.pages.update(page_id=appid_map_page_id[str(appid)], in_trash=True)
                     notion.pages.create(
-                        parent={"database_id": os.getenv("NOTION_DATABASE_ID")},
+                        parent={"type": "data_source_id", "data_source_id": main_datasource_id},
                         properties={k: v for k, v in properties.items() if v is not None},
                         icon=icon_or_cover,
                         cover=icon_or_cover
@@ -399,7 +423,7 @@ def import_to_notion(games):
                     break
 
         except Exception as e:
-            status = f"⚠️ 跳过({str(e)[:10]}...)"
+            status = f"⚠️ 跳过({str(e)})"
             skipped_count += 1
 
         # 实时更新状态行
@@ -413,46 +437,6 @@ def import_to_notion(games):
     print(
         f"| 成功: {success_count:^5} | 失败: {fail_count:^5} | 跳过: {skipped_count:^5} | 总计: {len(games):^5} | 耗时: {time.time() - start_time:.1f}s |")
     print("+" + "-" * 92 + "+")
-
-    # 配置画廊视图
-    try:
-        notion.databases.update(
-            database_id=os.getenv("NOTION_DATABASE_ID"),
-            views={
-                "游戏画廊": {
-                    "type": "gallery",
-                    "gallery": {
-                        "cover": {"type": "external", "external": {"property": "封面链接"}},
-                        "card_size": "medium",
-                        "properties": ["游戏名", "发行日期"]
-                    }
-                }
-            }
-        )
-        print("\n🎉 已自动配置画廊视图")
-    except Exception as e:
-        print(f"\n⚠️ 画廊视图配置失败: {str(e)}")
-
-
-def ensure_notion_database_columns():
-    """确保Notion数据库包含所有需要的列"""
-    try:
-        db_id = os.getenv("NOTION_DATABASE_ID")
-        db = notion.databases.retrieve(database_id=db_id)
-
-        # 检查是否已有商店链接列
-        if "商店链接" not in db["properties"]:
-            notion.databases.update(
-                database_id=db_id,
-                properties={
-                    "商店链接": {
-                        "url": {}  # 定义URL类型列
-                    }
-                }
-            )
-            print("✅ 已添加'商店链接'列到Notion数据库")
-    except Exception as e:
-        print(f"⚠️ 数据库结构检查失败: {str(e)}")
 
 
 # === 主程序 ===
