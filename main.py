@@ -366,7 +366,8 @@ def import_to_notion(games):
                 rate_page_id = appid_map_rate_page_id[str(appid)]
 
             display_progress_bar(idx - 1, len(games), prefix='进度:', suffix=f'处理中 {idx}/{len(games)}')
-
+            unlocked = achievement_rate['unlocked']
+            total = achievement_rate["total"]
             if not details.get("cover_url"):
                 continue
             properties = {
@@ -377,7 +378,7 @@ def import_to_notion(games):
                 '成就进度(%)': {'number': achievement_rate['rate']},
 
                 "成就进度(数目)": {"rich_text": [
-                    {"text": {"content": f"{achievement_rate['unlocked']}/{achievement_rate["total"]}"}}]},
+                    {"text": {"content": f"{unlocked}/{total}"}}]},
 
                 "最后游玩": {"date": {"start": timestamp_to_iso(game.get("rtime_last_played"))}}
                 if game.get("rtime_last_played") else None,
