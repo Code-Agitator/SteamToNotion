@@ -34,7 +34,8 @@ jobs:
     - name: run app
       env:
         NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
-        NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+        NOTION_MAIN_DATASOURCE_ID: ${{ secrets.NOTION_MAIN_DATASOURCE_ID }}
+        NOTION_RATE_DATASOURCE_ID: ${{ secrets.NOTION_RATE_DATASOURCE_ID }}
         STEAM_API_KEY: ${{ secrets.STEAM_API_KEY }}
         STEAM_ID: ${{ secrets.STEAM_ID }}
       run: |
