@@ -11,7 +11,7 @@ on:
         required: false
         default: 'manual trigger'
   schedule:
-    - cron: '0 2 * * *'  # 每天晚上运行
+    - cron: '0 18 * * *'  # 每天晚上运行
 
 permissions:
   contents: read
