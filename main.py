@@ -11,8 +11,10 @@ from collections import defaultdict
 # === 配置参数 ===
 load_dotenv()
 token = os.getenv("NOTION_TOKEN")
-main_datasource_id = os.getenv("NOTION_MAIN_DATASOURCE_ID")
+steam_datasource_id = os.getenv("NOTION_STEAM_DATASOURCE_ID")
 rate_datasource_id = os.getenv("NOTION_RATE_DATASOURCE_ID")
+main_datasource_id = os.getenv("NOTION_MAIN_DATASOURCE_ID")
+
 notion = Client(auth=token)
 
 STEAM_RETRY_TIMES = 5  # 从3增加到5
@@ -114,7 +116,7 @@ def get_game_details_with_cover(appid):
         "大型多人在线"
     }
 
-    url = f"https://store.steampowered.com/api/appdetails?appids={appid}&l=schinese"
+    url = f"https://store.steampowered.com/api/appdetails?appids={appid}&l=schinese&include_played_free_games=true"
     store_url = f"https://store.steampowered.com/app/{appid}/"
 
     for attempt in range(1, STEAM_RETRY_TIMES + 1):
@@ -327,12 +329,15 @@ def import_to_notion(games):
     start_time = time.time()
 
     # 获取原数据
-    origin_data = notion.data_sources.query(data_source_id=main_datasource_id)["results"]
-    appid_map_page_id = create_appid_map_for_pages(origin_data)
+    origin_data = notion.data_sources.query(data_source_id=steam_datasource_id)["results"]
+    appid_map_steam_page_id = create_appid_map_for_pages(origin_data)
 
     # 获取评分原数据
     origin_rate_data = notion.data_sources.query(data_source_id=rate_datasource_id)["results"]
     appid_map_rate_page_id = create_appid_map_for_pages(origin_rate_data)
+
+    origin_main_data = notion.data_sources.query(data_source_id=main_datasource_id)["results"]
+    appid_map_main_page_id = create_appid_map_for_pages(origin_main_data)
 
     # 创建状态表格展示
     print("\n导入状态实时更新：")
@@ -343,25 +348,37 @@ def import_to_notion(games):
     for idx, game in enumerate(games, 1):
         appid = game["appid"]
         hours = round(game.get("playtime_forever", 0) / 60, 1)
-        game_name = game.get("name", f"未知游戏 ({appid})")[:40]
+
         elapsed = f"{time.time() - start_time:.1f}s"
         progress = f"{idx}/{len(games)}"
 
         try:
             details = get_game_details_with_cover(appid)
+            game_name = details.get("name", f"未知游戏 ({appid})")[:200]
+
             achievements = get_game_achievements(appid)
             achievement_rate = calculate_achievement_rate(achievements)
+
+            icon_or_cover = {
+                'type': 'external',
+                'external': {
+                    'url': details.get("cover_url", "")
+                }
+            }
 
             if str(appid) not in appid_map_rate_page_id:
                 rate_properties = {
                     "appid": {"rich_text": [{"text": {"content": f"{appid}"}}]},
-                    "游戏名": {"title": [{"text": {"content": details.get("name", f"未知游戏 {appid}")[:200]}}]}
+                    "游戏名": {"title": [{"text": {"content": game_name}}]},
                 }
                 new_rate_page = notion.pages.create(
                     parent={"type": "data_source_id", "data_source_id": rate_datasource_id},
                     properties={k: v for k, v in rate_properties.items() if v is not None},
+                    icon=icon_or_cover,
+                    cover=icon_or_cover
                 )
                 rate_page_id = new_rate_page.get("id", "")
+                appid_map_rate_page_id[str(appid)] = rate_page_id
             else:
                 rate_page_id = appid_map_rate_page_id[str(appid)]
 
@@ -375,10 +392,9 @@ def import_to_notion(games):
 
                 "游玩时长": {"number": max(0, round(game.get("playtime_forever", 0) / 60, 1))},
 
-                '成就进度(%)': {'number': achievement_rate['rate']},
+                '成就总数': {'number': total},
 
-                "成就进度(数目)": {"rich_text": [
-                    {"text": {"content": f"{unlocked}/{total}"}}]},
+                '已完成成就数': {'number': unlocked},
 
                 "最后游玩": {"date": {"start": timestamp_to_iso(game.get("rtime_last_played"))}}
                 if game.get("rtime_last_played") else None,
@@ -390,31 +406,25 @@ def import_to_notion(games):
                 if details.get("developers") else None,
 
                 "appid": {"rich_text": [{"text": {"content": f"{appid}"}}]},
-                "数据更新时间": {"date": {"start": timestamp_to_iso(int(time.time()))}},
-                "打分关联": {"relation": [{"id": rate_page_id}]}
-            }
-            icon_or_cover = {
-                'type': 'external',
-                'external': {
-                    'url': details.get("cover_url", "")
-                }
+                "数据更新时间": {"date": {"start": timestamp_to_iso(int(time.time()))}}
             }
 
             # 导入尝试
             for attempt in range(1, NOTION_RETRY_TIMES + 1):
                 try:
-                    if str(appid) in appid_map_page_id.keys():
-                        notion.pages.update(page_id=appid_map_page_id[str(appid)],
+                    if str(appid) in appid_map_steam_page_id.keys():
+                        notion.pages.update(page_id=appid_map_steam_page_id[str(appid)],
                                             properties={k: v for k, v in properties.items() if v is not None},
                                             icon=icon_or_cover,
                                             cover=icon_or_cover)
                     else:
-                        notion.pages.create(
-                            parent={"type": "data_source_id", "data_source_id": main_datasource_id},
+                        new_steam_page = notion.pages.create(
+                            parent={"type": "data_source_id", "data_source_id": steam_datasource_id},
                             properties={k: v for k, v in properties.items() if v is not None},
                             icon=icon_or_cover,
                             cover=icon_or_cover
                         )
+                        appid_map_steam_page_id[str(appid)] = new_steam_page.get("id", "")
                     status = "✅ 成功"
                     success_count += 1
                     break
@@ -429,6 +439,20 @@ def import_to_notion(games):
                     fail_count += 1
                     break
 
+            if str(appid) not in appid_map_main_page_id:
+                rate_properties = {
+                    "appid": {"rich_text": [{"text": {"content": f"{appid}"}}]},
+                    "游戏名": {"title": [{"text": {"content": game_name}}]},
+                    '游戏手动数据': {"relation": [{"id": appid_map_rate_page_id[str(appid)]}]},
+                    'steam游戏数据': {"relation": [{"id": appid_map_steam_page_id[str(appid)]}]}
+
+                }
+                notion.pages.create(
+                    parent={"type": "data_source_id", "data_source_id": main_datasource_id},
+                    properties={k: v for k, v in rate_properties.items() if v is not None},
+                    icon=icon_or_cover,
+                    cover=icon_or_cover
+                )
         except Exception as e:
             status = f"⚠️ 跳过({str(e)})"
             skipped_count += 1
