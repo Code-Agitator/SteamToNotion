@@ -8,6 +8,8 @@ import re
 import time
 from collections import defaultdict
 
+from twisted.python.util import println
+
 # === 配置参数 ===
 load_dotenv()
 token = os.getenv("NOTION_TOKEN")
@@ -318,6 +320,19 @@ def calculate_achievement_rate(achievements):
     }
 
 
+def query_datasource_all_data(data_source_id):
+    result_data = []
+    has_more = True
+    start_cursor = None
+    while has_more:
+        query_result = notion.data_sources.query(data_source_id=data_source_id, page_size=100,
+                                                 start_cursor=start_cursor)
+        result_data.extend(query_result["results"])
+        has_more = query_result["has_more"]
+        start_cursor = query_result.get("next_cursor")
+    return result_data
+
+
 def import_to_notion(games):
     """导入数据到Notion（含详细状态跟踪）"""
     print(f"\n准备导入 {len(games)} 个游戏...")
@@ -329,14 +344,17 @@ def import_to_notion(games):
     start_time = time.time()
 
     # 获取原数据
-    origin_data = notion.data_sources.query(data_source_id=steam_datasource_id)["results"]
+    origin_data = query_datasource_all_data(data_source_id=steam_datasource_id)
+    println(f"加载原Steam数据成功，共有 {len(origin_data)} 条数据")
     appid_map_steam_page_id = create_appid_map_for_pages(origin_data)
 
     # 获取评分原数据
-    origin_rate_data = notion.data_sources.query(data_source_id=rate_datasource_id)["results"]
+    origin_rate_data = query_datasource_all_data(data_source_id=rate_datasource_id)
+    println(f"加载原自定义数据成功，共有 {len(origin_rate_data)} 条数据")
     appid_map_rate_page_id = create_appid_map_for_pages(origin_rate_data)
 
-    origin_main_data = notion.data_sources.query(data_source_id=main_datasource_id)["results"]
+    origin_main_data = query_datasource_all_data(data_source_id=main_datasource_id)
+    println(f"加载原主数据成功，共有 {len(origin_main_data)} 条数据")
     appid_map_main_page_id = create_appid_map_for_pages(origin_main_data)
 
     # 创建状态表格展示
