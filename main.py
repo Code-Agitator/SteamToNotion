@@ -86,7 +86,7 @@ def display_progress_bar(iteration, total, prefix='', suffix='', length=50, fill
 # === Steam API 交互 ===
 def get_steam_games():
     """获取Steam游戏库"""
-    url = f"https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/?key={os.getenv('STEAM_API_KEY')}&steamid={os.getenv('STEAM_ID')}&include_appinfo=1"
+    url = f"https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/?key={os.getenv('STEAM_API_KEY')}&steamid={os.getenv('STEAM_ID')}&include_appinfo=1&include_played_free_games=true"
 
     for attempt in range(1, STEAM_RETRY_TIMES + 1):
         try:
@@ -116,7 +116,7 @@ def get_game_details_with_cover(appid):
         "大型多人在线"
     }
 
-    url = f"https://store.steampowered.com/api/appdetails?appids={appid}&l=schinese&include_played_free_games=true"
+    url = f"https://store.steampowered.com/api/appdetails?appids={appid}&l=schinese"
     store_url = f"https://store.steampowered.com/app/{appid}/"
 
     for attempt in range(1, STEAM_RETRY_TIMES + 1):
