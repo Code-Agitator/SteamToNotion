@@ -1,14 +1,13 @@
 # main.py（带游戏选择功能）
-import requests
-from notion_client import Client
 import os
-from dotenv import load_dotenv
-from datetime import datetime
 import re
 import time
 from collections import defaultdict
+from datetime import datetime
 
-from twisted.python.util import println
+import requests
+from dotenv import load_dotenv
+from notion_client import Client
 
 # === 配置参数 ===
 load_dotenv()
@@ -345,16 +344,16 @@ def import_to_notion(games):
 
     # 获取原数据
     origin_data = query_datasource_all_data(data_source_id=steam_datasource_id)
-    println(f"加载原Steam数据成功，共有 {len(origin_data)} 条数据")
+    print(f"加载原Steam数据成功，共有 {len(origin_data)} 条数据")
     appid_map_steam_page_id = create_appid_map_for_pages(origin_data)
 
     # 获取评分原数据
     origin_rate_data = query_datasource_all_data(data_source_id=rate_datasource_id)
-    println(f"加载原自定义数据成功，共有 {len(origin_rate_data)} 条数据")
+    print(f"加载原自定义数据成功，共有 {len(origin_rate_data)} 条数据")
     appid_map_rate_page_id = create_appid_map_for_pages(origin_rate_data)
 
     origin_main_data = query_datasource_all_data(data_source_id=main_datasource_id)
-    println(f"加载原主数据成功，共有 {len(origin_main_data)} 条数据")
+    print(f"加载原主数据成功，共有 {len(origin_main_data)} 条数据")
     appid_map_main_page_id = create_appid_map_for_pages(origin_main_data)
 
     # 创建状态表格展示
